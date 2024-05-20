@@ -1,3 +1,2 @@
-colorama
-youtube_dl
-ffmpeg
+colorama==0.4.6
+yt-dlp==2024.4.9
