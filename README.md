@@ -23,8 +23,12 @@ O LiveRecorder é uma ferramenta simples para gravar transmissões ao vivo de pl
 1. Clone este repositório para o seu ambiente local.
 2. Certifique-se de ter o Python instalado em seu sistema.
 3. Instale as dependências executando `pip install -r requirements.txt`.
-4. Execute o script principal `main.py`.
-5. Siga as instruções no terminal para iniciar e encerrar as gravações.
+4. Instale o ffmpeg:
+   - **Windows:** Baixe o ffmpeg do site oficial (https://ffmpeg.org/download.html) e adicione-o ao seu PATH.
+   - **Linux:** Instale-o via gerenciador de pacotes. Por exemplo, no Ubuntu, você pode usar o comando `sudo apt-get install ffmpeg`.
+
+5. Execute o script principal `main.py`.
+6. Siga as instruções no terminal para iniciar e encerrar as gravações.
 
 ## Licença 📄
 
