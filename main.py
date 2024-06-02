@@ -3,11 +3,12 @@ import os
 import threading
 import time
 from colorama import init, Fore, Style
+from concurrent.futures import ThreadPoolExecutor
 import signal
 
-init()  # Inicializa colorama para suporte a cores no Windows
+init()
 
-def print_elapsed_time(elapsed_times):
+def print_elapsed_time(elapsed_times, record_threads):
     """Função para imprimir o tempo decorrido das gravações em tempo real."""
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -23,12 +24,15 @@ def print_elapsed_time(elapsed_times):
                 minutes = elapsed_time // 60
                 seconds = elapsed_time % 60
                 print(f"{Fore.MAGENTA}{channel_name}:{Style.RESET_ALL} {Fore.GREEN}{minutes} Minutos {seconds} Segundos{Style.RESET_ALL}")
+        active_recording_threads = sum(1 for future in record_threads if not future.done())
+        print(f"{Fore.RED}\nThreads Ativas: {Style.RESET_ALL}{active_recording_threads}")
         print("============================================")
         print(f"{Fore.YELLOW}Pressione CTRL + C para encerrar a gravação!{Style.RESET_ALL}")
-        time.sleep(5)  # Atraso em segundos entre as atualizações
+        print("============================================")
+        time.sleep(10)  # Atraso em segundos entre as atualizações (aumentado para reduzir uso de CPU)
         for channel_name in elapsed_times:
             if elapsed_times[channel_name] is not None and elapsed_times[channel_name] != -1:
-                elapsed_times[channel_name] += 5  # Aumenta o tempo decorrido em segundos
+                elapsed_times[channel_name] += 10  # Aumenta o tempo decorrido em segundos
 
 def get_stream_url(url, channel_name):
     """Função para obter a URL do stream usando yt-dlp."""
@@ -36,8 +40,8 @@ def get_stream_url(url, channel_name):
     try:
         stream_url = subprocess.check_output(yt_dlp_command, stderr=subprocess.STDOUT).strip().decode('utf-8')
         return stream_url
-    except subprocess.CalledProcessError as e:
-        pass  # Ignorar o erro e continuar sem imprimir a mensagem de erro
+    except subprocess.CalledProcessError:
+        pass
     except FileNotFoundError:
         print(f"{Fore.RED}yt-dlp não encontrado. Verifique se está instalado e no PATH.{Style.RESET_ALL}")
     return None
@@ -49,7 +53,7 @@ def record_live(url, channel_name, elapsed_times):
 
     elapsed_times[channel_name] = -1  # Indica que está tentando obter a URL do stream
 
-    retries = 2 # Número de tentativas
+    retries = 2  # Número de tentativas
     for attempt in range(retries):
         stream_url = get_stream_url(url, channel_name)
         if stream_url:
@@ -102,28 +106,30 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-live_urls = [
-    {"url": "https://www.twitch.tv/canalname1", "name": "canalname1"},
-    {"url": "https://www.youtube.com/channelname2", "name": "channelname2"},
-]
+# Ler as URLs dos canais do arquivo canais.txt
+live_urls = []
+with open("canais.txt", "r") as file:
+    for line in file:
+        url = line.strip()  # Remover espaços em branco extras e quebras de linha
+        name = url.split("/")[-2]  # Extrair o nome do canal a partir da URL
+        live_urls.append({"url": url, "name": name})
 
 elapsed_times = {live_info["name"]: -1 for live_info in live_urls}  # Inicializa com -1 para indicar a obtenção da URL
 
-elapsed_time_thread = threading.Thread(target=print_elapsed_time, args=(elapsed_times,))
+record_threads = []
+
+elapsed_time_thread = threading.Thread(target=print_elapsed_time, args=(elapsed_times, record_threads))
 elapsed_time_thread.daemon = True
 elapsed_time_thread.start()
 
-# Limita o número de threads
-max_threads = 4
-threads = []
-for live_info in live_urls:
-    url = live_info["url"]
-    channel_name = live_info["name"]
-    while threading.active_count() >= max_threads:
-        time.sleep(5)  # Aguarda até que haja espaço disponível para outra thread
-    thread = threading.Thread(target=record_live, args=(url, channel_name, elapsed_times))
-    thread.start()
-    threads.append(thread)
+# Usar ThreadPoolExecutor para gerenciar threads
+with ThreadPoolExecutor(max_workers=len(live_urls)) as executor:
+    for live_info in live_urls:
+        url = live_info["url"]
+        channel_name = live_info["name"]
+        future = executor.submit(record_live, url, channel_name, elapsed_times)
+        record_threads.append(future)
 
-for thread in threads:
-    thread.join()
+# Esperar todas as threads terminarem
+for thread in record_threads:
+    thread.result()
